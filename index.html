@@ -26,8 +26,21 @@
         <main>
             <!-- ======================= LESSON PAGE ======================= -->
             <div v-if="!showCart">
-                <!-- Sort controls -->
+                <!-- Search / sort controls -->
                 <div class="controls">
+                    <!-- Search is done by the server (GET /search?q=...) -->
+                    <label><i class="fa fa-search" aria-hidden="true"></i>
+                        <input type="text" v-model="searchText" placeholder="Search lessons...">
+                    </label>
+                    <!-- Choose a teacher to see only their lessons (GET /teachers/:id/lessons) -->
+                    <label>Teacher:
+                        <select v-model="selectedTeacher">
+                            <option value="">All teachers</option>
+                            <option v-for="teacher in teachers" v-bind:key="teacher._id" v-bind:value="teacher._id">
+                                {{teacher.firstName}} {{teacher.lastName}}
+                            </option>
+                        </select>
+                    </label>
                     <label>Sort by:
                         <select v-model="sortBy">
                             <option value="topic">Subject</option>
@@ -41,6 +54,7 @@
                 </div>
 
                 <p class="empty" v-if="loading">Loading lessons...</p>
+                <p class="empty" v-if="!loading && !errorMessage && lessons.length === 0">No lessons match your search.</p>
                 <p class="message error" v-if="errorMessage">{{errorMessage}}</p>
 
                 <div class="lesson-grid">
@@ -52,6 +66,7 @@
                             <p><strong>Location:</strong> {{lesson.location}}</p>
                             <p><strong>Price:</strong> £{{lesson.price}}</p>
                             <p><strong>Spaces:</strong> {{spacesLeft(lesson)}}</p>
+                            <p v-if="teacherName(lesson)"><strong>Teacher:</strong> {{teacherName(lesson)}}</p>
                             <div class="spacer"></div>
 
                             <!-- Always visible, disabled when there are no spaces left -->
@@ -135,6 +150,9 @@
                     showCart: false,
                     sortBy: "topic",     // topic, location, price or space
                     sortOrder: "asc",    // asc or desc
+                    searchText: "",
+                    teachers: [],
+                    selectedTeacher: "", // _id of the chosen teacher, "" = all teachers
                     order: {
                         name: "",
                         phone: ""
@@ -186,8 +204,91 @@
             // created() runs once when the app starts: load the lessons from the server
             created(){
                 this.loadAllLessons();
+                this.loadTeachers();
+            },
+            watch:{
+                // Runs every time the search box changes. We wait 300ms after the
+                // user stops typing so we don't send a request for every key press.
+                searchText(newText){
+                    // searching looks at all lessons, so reset the teacher filter
+                    if (newText.trim() !== "") this.selectedTeacher = "";
+                    clearTimeout(this.searchTimer);
+                    this.searchTimer = setTimeout(() => this.refreshView(), 300);
+                },
+                // Runs every time a different teacher is chosen
+                selectedTeacher(newTeacher){
+                    if (newTeacher !== "") this.searchText = "";
+                    this.refreshView();
+                }
             },
             methods:{
+                // Decide which lessons to show: a teacher's lessons, search results, or all
+                refreshView(){
+                    if (this.selectedTeacher !== "") {
+                        this.loadTeacherLessons();
+                    } else if (this.searchText.trim() !== "") {
+                        this.searchLessons();
+                    } else {
+                        this.lessons = this.allLessons;
+                    }
+                },
+                // GET /teachers
+                loadTeachers(){
+                    fetch(API_URL + "/teachers")
+                        .then(response => {
+                            if (!response.ok) throw new Error("Server returned " + response.status);
+                            return response.json();
+                        })
+                        .then(teachers => {
+                            this.teachers = teachers;
+                        })
+                        .catch(error => {
+                            console.error("Could not load teachers:", error.message);
+                        });
+                },
+                // GET /teachers/:id/lessons - only the lessons taught by the chosen teacher
+                loadTeacherLessons(){
+                    const teacherId = this.selectedTeacher;
+                    this.errorMessage = "";
+                    fetch(API_URL + "/teachers/" + teacherId + "/lessons")
+                        .then(response => {
+                            if (!response.ok) throw new Error("Server returned " + response.status);
+                            return response.json();
+                        })
+                        .then(lessons => {
+                            if (teacherId === this.selectedTeacher) {
+                                this.lessons = lessons;
+                            }
+                        })
+                        .catch(error => {
+                            this.errorMessage = "Could not load teacher's lessons: " + error.message;
+                        });
+                },
+                // Name of the teacher who teaches a lesson (or "" if none)
+                teacherName(lesson){
+                    const teacher = this.teachers.find(t => t.lessonIDs.includes(lesson._id));
+                    return teacher ? teacher.firstName + " " + teacher.lastName : "";
+                },
+                // GET /search?q=... - the server finds lessons that contain the text
+                // in their topic, location, price or space
+                searchLessons(){
+                    const text = this.searchText.trim();
+                    this.errorMessage = "";
+                    fetch(API_URL + "/search?q=" + encodeURIComponent(text))
+                        .then(response => {
+                            if (!response.ok) throw new Error("Server returned " + response.status);
+                            return response.json();
+                        })
+                        .then(results => {
+                            // ignore old responses if the user has typed something else since
+                            if (text === this.searchText.trim()) {
+                                this.lessons = results;
+                            }
+                        })
+                        .catch(error => {
+                            this.errorMessage = "Search failed: " + error.message;
+                        });
+                },
                 // GET /lessons - fetch returns a promise, .then() runs when the response arrives
                 loadAllLessons(){
                     this.loading = true;
@@ -199,7 +300,8 @@
                         })
                         .then(lessons => {
                             this.allLessons = lessons;
-                            this.lessons = lessons;
+                            // keep any search or teacher filter the user has chosen
+                            this.refreshView();
                         })
                         .catch(error => {
                             this.errorMessage = "Could not load lessons: " + error.message;

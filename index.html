@@ -3,165 +3,130 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vue.js Pet Depot</title>
+    <title>After School Lessons</title>
 
-    <script src="products.js"></script>
+    <script src="lessons.js"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
-
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-
-        /* Checkout button fixed in the top-right corner */
-        .checkout-btn {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 10px 16px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-
-        /* Blue buttons */
-        .add-btn {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            padding: 10px 18px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-        .add-btn:hover { background-color: #0056b3; }
-
-        /* Greyed out when disabled */
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .add-btn:disabled:hover { background-color: #007bff; }
-
-        .product { border-bottom: 1px solid #ddd; padding-bottom: 16px; margin-bottom: 16px; }
-        .confirm { color: green; font-weight: bold; }
-    </style>
 </head>
 <body>
 
     <div id="app">
-        <h1 v-text = "sitename"></h1>
+        <header>
+            <h1 v-text="sitename"></h1>
 
-        <!-- Cart button: enabled once at least one item is in the cart (always usable on the cart page so you can go back) -->
-        <button class="checkout-btn" v-on:click="toggleCart()" v-bind:disabled="numberOfItems === 0 && !displayCart">
-            <i class="fa fa-shopping-cart" aria-hidden="true"></i>
-            {{displayCart ? 'Back to shop' : 'Cart (' + numberOfItems + ')'}}
-        </button>
+            <!-- Cart button: enabled once at least one lesson is in the cart.
+                 On the cart page it is always enabled so the user can go back. -->
+            <button class="cart-btn" v-on:click="toggleCart()" v-bind:disabled="cart.length === 0 && !showCart">
+                <i class="fa fa-shopping-cart" aria-hidden="true"></i>
+                {{ showCart ? 'Back to lessons' : 'Cart (' + cart.length + ')' }}
+            </button>
+        </header>
 
         <main>
-            <!-- Product page: shown when displayCart is false -->
-            <div v-if="!displayCart">
-                <!-- v-for displays every product in the products array -->
-                <div class="product" v-for="product in products">
-                    <figure>
-                        <img v-bind:src="product.image" width = 300>
-                    </figure>
-                    <h2 v-text="product.title"></h2>
-                    <p v-text="product.description"></p>
-                    <p>Price: £{{product.price}}</p>
-                    <p>Available inventory: {{product.availability}}</p>
+            <!-- ======================= LESSON PAGE ======================= -->
+            <div v-if="!showCart">
+                <div class="lesson" v-for="lesson in lessons" v-bind:key="lesson._id">
+                    <i v-bind:class="'fa fa-3x ' + lesson.icon" aria-hidden="true"></i>
+                    <h2>{{lesson.topic}}</h2>
+                    <p>Location: {{lesson.location}}</p>
+                    <p>Price: £{{lesson.price}}</p>
+                    <p>Spaces: {{spacesLeft(lesson)}}</p>
 
-                    <!-- Add to cart: always visible, only enabled when canAddToCart(product) is true -->
-                    <button class="add-btn" v-on:click="addToCart(product)" v-bind:disabled="!canAddToCart(product)">Add to cart</button>
+                    <!-- Always visible, disabled when there are no spaces left -->
+                    <button class="add-btn" v-on:click="addToCart(lesson)" v-bind:disabled="!canAddToCart(lesson)">
+                        Add to cart
+                    </button>
                 </div>
             </div>
 
-            <!-- Cart / checkout page: shown when displayCart is true -->
+            <!-- ======================== CART PAGE ======================== -->
             <div v-else>
                 <h2>Your Cart</h2>
+                <p v-if="cart.length === 0">Your cart is empty.</p>
 
-                <!-- Summary of each product in the cart, hidden if it has 0 copies -->
-                <div v-for="product in products">
-                    <p v-if="cartItemCount(product.id) > 0">
-                        {{product.title}} x {{cartItemCount(product.id)}}
-                        <button v-on:click="removeFromCart(product)">Remove</button>
+                <div v-for="lesson in lessons" v-bind:key="lesson._id">
+                    <p v-if="cartCount(lesson._id) > 0">
+                        {{lesson.topic}} ({{lesson.location}}) x {{cartCount(lesson._id)}}
+                        <button v-on:click="removeFromCart(lesson)">Remove</button>
                     </p>
                 </div>
-                <p v-if="numberOfItems === 0">Your cart is empty.</p>
 
                 <h2>Checkout</h2>
                 <p>Name: <input v-model="order.name"></p>
                 <p>Phone: <input v-model="order.phone"></p>
 
-                <!-- Checkout button: always visible, only enabled when name and phone are filled in correctly -->
+                <!-- Always visible, only enabled when name and phone are valid -->
                 <button class="add-btn" v-on:click="submitOrder()" v-bind:disabled="!canCheckout">Checkout</button>
 
-                <p class="confirm" v-if="orderConfirmed">Order confirmed! Thank you, {{confirmedName}}.</p>
+                <p v-if="orderMessage">{{orderMessage}}</p>
             </div>
         </main>
     </div>
 
     <script type="module">
         const {createApp} = Vue
-        const petstore = createApp({
+        const app = createApp({
             data(){
                 return{
-                    sitename: "Vue.js Pet Depot",
-                    products: productsArray,
-                    cart:[],
-                    displayCart: false,
+                    sitename: "After School Lessons",
+                    lessons: lessonsArray,
+                    cart: [],            // holds lesson _id values, one per space booked
+                    showCart: false,
                     order: {
                         name: "",
                         phone: ""
                     },
-                    orderConfirmed: false,
-                    confirmedName: ""
+                    orderMessage: ""
                 }
             },
             computed:{
-                numberOfItems: function(){
-                    return this.cart.length;
+                nameIsValid: function(){
+                    return /^[A-Za-z ]+$/.test(this.order.name.trim());
+                },
+                phoneIsValid: function(){
+                    return /^[0-9]+$/.test(this.order.phone.trim());
                 },
                 canCheckout: function(){
-                    // name: letters and spaces only, phone: numbers only, cart not empty
-                    let nameOk = /^[A-Za-z ]+$/.test(this.order.name.trim());
-                    let phoneOk = /^[0-9]+$/.test(this.order.phone.trim());
-                    return nameOk && phoneOk && this.cart.length > 0;
+                    return this.nameIsValid && this.phoneIsValid && this.cart.length > 0;
                 }
             },
             methods:{
-                addToCart(product){
-                    this.cart.push(product.id);
-                    product.availability--;
-                    this.orderConfirmed = false;
+                // how many times a lesson id appears in the cart
+                cartCount(id){
+                    return this.cart.filter(item => item === id).length;
                 },
-                canAddToCart(product){
-                    return product.availability > 0;
+                // spaces left = spaces in the database minus spaces already in the cart
+                spacesLeft(lesson){
+                    return lesson.space - this.cartCount(lesson._id);
                 },
-                cartItemCount(id){
-                    // count how many times this id appears in the cart
-                    let count = 0;
-                    for (let i = 0; i < this.cart.length; i++) {
-                        if (this.cart[i] === id) count++;
+                canAddToCart(lesson){
+                    return this.spacesLeft(lesson) > 0;
+                },
+                addToCart(lesson){
+                    if (this.canAddToCart(lesson)) {
+                        this.cart.push(lesson._id);
+                        this.orderMessage = "";
                     }
-                    return count;
                 },
-                removeFromCart(product){
-                    // remove one copy of the product id and give the space back
-                    let index = this.cart.indexOf(product.id);
+                removeFromCart(lesson){
+                    const index = this.cart.indexOf(lesson._id);
                     if (index !== -1) {
                         this.cart.splice(index, 1);
-                        product.availability++;
                     }
                 },
+                toggleCart(){
+                    this.showCart = !this.showCart;
+                },
                 submitOrder(){
-                    this.confirmedName = this.order.name;
-                    this.orderConfirmed = true;
+                    this.orderMessage = "Order submitted! Thank you, " + this.order.name + ".";
                     this.cart = [];
                     this.order.name = "";
                     this.order.phone = "";
-                },
-                toggleCart(){
-                    this.displayCart = this.displayCart ? false : true;
                 }
             }
         })
-        petstore.mount('#app')
+        app.mount('#app')
     </script>
 
 </body>

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vue.js Pet Depot</title>
+
+    <script src="products.js"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+
+        /* Checkout button fixed in the top-right corner */
+        .checkout-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 16px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        /* Blue buttons */
+        .add-btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 10px 18px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .add-btn:hover { background-color: #0056b3; }
+
+        /* Greyed out when disabled */
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .add-btn:disabled:hover { background-color: #007bff; }
+
+        .product { border-bottom: 1px solid #ddd; padding-bottom: 16px; margin-bottom: 16px; }
+        .confirm { color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="app">
+        <h1 v-text = "sitename"></h1>
+
+        <!-- Cart button: enabled once at least one item is in the cart (always usable on the cart page so you can go back) -->
+        <button class="checkout-btn" v-on:click="toggleCart()" v-bind:disabled="numberOfItems === 0 && !displayCart">
+            <i class="fa fa-shopping-cart" aria-hidden="true"></i>
+            {{displayCart ? 'Back to shop' : 'Cart (' + numberOfItems + ')'}}
+        </button>
+
+        <main>
+            <!-- Product page: shown when displayCart is false -->
+            <div v-if="!displayCart">
+                <!-- v-for displays every product in the products array -->
+                <div class="product" v-for="product in products">
+                    <figure>
+                        <img v-bind:src="product.image" width = 300>
+                    </figure>
+                    <h2 v-text="product.title"></h2>
+                    <p v-text="product.description"></p>
+                    <p>Price: £{{product.price}}</p>
+                    <p>Available inventory: {{product.availability}}</p>
+
+                    <!-- Add to cart: always visible, only enabled when canAddToCart(product) is true -->
+                    <button class="add-btn" v-on:click="addToCart(product)" v-bind:disabled="!canAddToCart(product)">Add to cart</button>
+                </div>
+            </div>
+
+            <!-- Cart / checkout page: shown when displayCart is true -->
+            <div v-else>
+                <h2>Your Cart</h2>
+
+                <!-- Summary of each product in the cart, hidden if it has 0 copies -->
+                <div v-for="product in products">
+                    <p v-if="cartItemCount(product.id) > 0">
+                        {{product.title}} x {{cartItemCount(product.id)}}
+                        <button v-on:click="removeFromCart(product)">Remove</button>
+                    </p>
+                </div>
+                <p v-if="numberOfItems === 0">Your cart is empty.</p>
+
+                <h2>Checkout</h2>
+                <p>Name: <input v-model="order.name"></p>
+                <p>Phone: <input v-model="order.phone"></p>
+
+                <!-- Checkout button: always visible, only enabled when name and phone are filled in correctly -->
+                <button class="add-btn" v-on:click="submitOrder()" v-bind:disabled="!canCheckout">Checkout</button>
+
+                <p class="confirm" v-if="orderConfirmed">Order confirmed! Thank you, {{confirmedName}}.</p>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        const {createApp} = Vue
+        const petstore = createApp({
+            data(){
+                return{
+                    sitename: "Vue.js Pet Depot",
+                    products: productsArray,
+                    cart:[],
+                    displayCart: false,
+                    order: {
+                        name: "",
+                        phone: ""
+                    },
+                    orderConfirmed: false,
+                    confirmedName: ""
+                }
+            },
+            computed:{
+                numberOfItems: function(){
+                    return this.cart.length;
+                },
+                canCheckout: function(){
+                    // name: letters and spaces only, phone: numbers only, cart not empty
+                    let nameOk = /^[A-Za-z ]+$/.test(this.order.name.trim());
+                    let phoneOk = /^[0-9]+$/.test(this.order.phone.trim());
+                    return nameOk && phoneOk && this.cart.length > 0;
+                }
+            },
+            methods:{
+                addToCart(product){
+                    this.cart.push(product.id);
+                    product.availability--;
+                    this.orderConfirmed = false;
+                },
+                canAddToCart(product){
+                    return product.availability > 0;
+                },
+                cartItemCount(id){
+                    // count how many times this id appears in the cart
+                    let count = 0;
+                    for (let i = 0; i < this.cart.length; i++) {
+                        if (this.cart[i] === id) count++;
+                    }
+                    return count;
+                },
+                removeFromCart(product){
+                    // remove one copy of the product id and give the space back
+                    let index = this.cart.indexOf(product.id);
+                    if (index !== -1) {
+                        this.cart.splice(index, 1);
+                        product.availability++;
+                    }
+                },
+                submitOrder(){
+                    this.confirmedName = this.order.name;
+                    this.orderConfirmed = true;
+                    this.cart = [];
+                    this.order.name = "";
+                    this.order.phone = "";
+                },
+                toggleCart(){
+                    this.displayCart = this.displayCart ? false : true;
+                }
+            }
+        })
+        petstore.mount('#app')
+    </script>
+
+</body>
+</html>

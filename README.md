@@ -6,8 +6,8 @@ Font Awesome icons. All data comes from the Express.js API using `fetch` promise
 ## Links
 - **[Vue.js App] GitHub repository:** https://github.com/Moiz1216/cst3144-coursework
 - **[Vue.js App] GitHub Pages:** https://moiz1216.github.io/cst3144-coursework/
-- **[Express.js App] GitHub repository:** _add link_
-- **[Express.js App] render.com – all lessons:** _add link_ (e.g. `https://M00XXXXXX-after-school.onrender.com/lessons`)
+- **[Express.js App] GitHub repository:** https://github.com/Moiz1216/cst3144-backend
+- **[Express.js App] render.com – all lessons:** https://m01039431-after-school.onrender.com/lessons
 
 ## Features
 - 10 lessons displayed with `v-for` (subject, location, price, spaces, image, icon, teacher)

@@ -100,11 +100,12 @@
                     </div>
 
                     <!-- Always visible, only enabled when name and phone are valid -->
-                    <button class="add-btn" v-on:click="submitOrder()" v-bind:disabled="!canCheckout">
-                        <i class="fa fa-check" aria-hidden="true"></i> Checkout
+                    <button class="add-btn" v-on:click="submitOrder()" v-bind:disabled="!canCheckout || submitting">
+                        <i class="fa fa-check" aria-hidden="true"></i> {{ submitting ? 'Submitting...' : 'Checkout' }}
                     </button>
 
                     <p class="message success" v-if="orderMessage">{{orderMessage}}</p>
+                    <p class="message error" v-if="orderError">{{orderError}}</p>
                 </div>
             </div>
         </main>
@@ -138,7 +139,9 @@
                         name: "",
                         phone: ""
                     },
-                    orderMessage: ""
+                    orderMessage: "",
+                    orderError: "",
+                    submitting: false
                 }
             },
             computed:{
@@ -231,11 +234,65 @@
                 toggleCart(){
                     this.showCart = !this.showCart;
                 },
+                // Called when the Checkout button is clicked:
+                // 1. POST the order to the server
+                // 2. PUT the new number of spaces for every lesson in the order
+                // 3. show a confirmation message, empty the cart and reload the lessons
                 submitOrder(){
-                    this.orderMessage = "Order submitted! Thank you, " + this.order.name + ".";
-                    this.cart = [];
-                    this.order.name = "";
-                    this.order.phone = "";
+                    // Group the cart: one entry per lesson with the number of spaces booked
+                    const lessonIDs = [...new Set(this.cart)];
+                    const spaces = lessonIDs.map(id => this.cartCount(id));
+
+                    const newOrder = {
+                        name: this.order.name.trim(),
+                        phone: this.order.phone.trim(),
+                        lessonIDs: lessonIDs,
+                        spaces: spaces
+                    };
+
+                    this.submitting = true;
+                    this.orderMessage = "";
+                    this.orderError = "";
+
+                    // POST /orders
+                    fetch(API_URL + "/orders", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(newOrder)
+                    })
+                        .then(response => {
+                            if (!response.ok) throw new Error("Order was not saved (" + response.status + ")");
+                            return response.json();
+                        })
+                        .then(() => {
+                            // PUT /lessons/:id for every lesson in the order, setting the
+                            // available spaces to the new number. Promise.all waits for all of them.
+                            const updates = lessonIDs.map((id, i) => {
+                                const lesson = this.allLessons.find(l => l._id === id);
+                                return fetch(API_URL + "/lessons/" + id, {
+                                    method: "PUT",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ space: lesson.space - spaces[i] })
+                                }).then(response => {
+                                    if (!response.ok) throw new Error("Spaces were not updated (" + response.status + ")");
+                                    return response.json();
+                                });
+                            });
+                            return Promise.all(updates);
+                        })
+                        .then(() => {
+                            this.orderMessage = "Order submitted! Thank you, " + newOrder.name + ".";
+                            this.cart = [];
+                            this.order.name = "";
+                            this.order.phone = "";
+                            return this.loadAllLessons();
+                        })
+                        .catch(error => {
+                            this.orderError = error.message;
+                        })
+                        .finally(() => {
+                            this.submitting = false;
+                        });
                 }
             }
         })

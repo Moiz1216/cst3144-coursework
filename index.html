@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>After School Lessons</title>
 
-    <script src="lessons.js"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <link rel="stylesheet" href="style.css">
@@ -41,8 +40,13 @@
                     <label><input type="radio" value="desc" v-model="sortOrder"> Descending</label>
                 </div>
 
+                <p class="empty" v-if="loading">Loading lessons...</p>
+                <p class="message error" v-if="errorMessage">{{errorMessage}}</p>
+
                 <div class="lesson-grid">
                     <div class="lesson" v-for="lesson in sortedLessons" v-bind:key="lesson._id">
+                        <!-- Image is served by the static file middleware on the Express server -->
+                        <img v-bind:src="apiUrl + '/images/' + lesson.image" v-bind:alt="lesson.topic">
                         <div class="lesson-body">
                             <h2><i v-bind:class="'fa ' + lesson.icon" aria-hidden="true"></i> {{lesson.topic}}</h2>
                             <p><strong>Location:</strong> {{lesson.location}}</p>
@@ -66,7 +70,7 @@
                     <p class="empty" v-if="cart.length === 0">Your cart is empty.</p>
 
                     <!-- One row per lesson that is in the cart (lessons with 0 copies are skipped) -->
-                    <template v-for="lesson in lessons" v-bind:key="lesson._id">
+                    <template v-for="lesson in allLessons" v-bind:key="lesson._id">
                         <div class="cart-item" v-if="cartCount(lesson._id) > 0">
                             <div>
                                 <strong><i v-bind:class="'fa ' + lesson.icon" aria-hidden="true"></i> {{lesson.topic}}</strong>
@@ -108,11 +112,24 @@
 
     <script type="module">
         const {createApp} = Vue
+
+        // Address of the Express.js server.
+        // When the page is opened locally it uses the local server,
+        // otherwise (on GitHub Pages) it uses the server hosted on render.com
+        const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.protocol === "file:";
+        const API_URL = isLocal
+            ? "http://localhost:3000"
+            : "https://M00XXXXXX-after-school.onrender.com";
+
         const app = createApp({
             data(){
                 return{
                     sitename: "After School Lessons",
-                    lessons: lessonsArray,
+                    apiUrl: API_URL,
+                    lessons: [],         // the lessons currently shown on the page
+                    allLessons: [],      // every lesson (used by the cart page)
+                    loading: false,
+                    errorMessage: "",
                     cart: [],            // holds lesson _id values, one per space booked
                     showCart: false,
                     sortBy: "topic",     // topic, location, price or space
@@ -148,7 +165,7 @@
                 cartTotal: function(){
                     let total = 0;
                     for (const id of this.cart) {
-                        const lesson = this.lessons.find(l => l._id === id);
+                        const lesson = this.allLessons.find(l => l._id === id);
                         if (lesson) total += lesson.price;
                     }
                     return total;
@@ -163,7 +180,31 @@
                     return this.nameIsValid && this.phoneIsValid && this.cart.length > 0;
                 }
             },
+            // created() runs once when the app starts: load the lessons from the server
+            created(){
+                this.loadAllLessons();
+            },
             methods:{
+                // GET /lessons - fetch returns a promise, .then() runs when the response arrives
+                loadAllLessons(){
+                    this.loading = true;
+                    this.errorMessage = "";
+                    return fetch(API_URL + "/lessons")
+                        .then(response => {
+                            if (!response.ok) throw new Error("Server returned " + response.status);
+                            return response.json();
+                        })
+                        .then(lessons => {
+                            this.allLessons = lessons;
+                            this.lessons = lessons;
+                        })
+                        .catch(error => {
+                            this.errorMessage = "Could not load lessons: " + error.message;
+                        })
+                        .finally(() => {
+                            this.loading = false;
+                        });
+                },
                 // how many times a lesson id appears in the cart
                 cartCount(id){
                     return this.cart.filter(item => item === id).length;

@@ -26,7 +26,21 @@
         <main>
             <!-- ======================= LESSON PAGE ======================= -->
             <div v-if="!showCart">
-                <div class="lesson" v-for="lesson in lessons" v-bind:key="lesson._id">
+                <!-- Sort controls -->
+                <div class="controls">
+                    <label>Sort by:
+                        <select v-model="sortBy">
+                            <option value="topic">Subject</option>
+                            <option value="location">Location</option>
+                            <option value="price">Price</option>
+                            <option value="space">Spaces</option>
+                        </select>
+                    </label>
+                    <label><input type="radio" value="asc" v-model="sortOrder"> Ascending</label>
+                    <label><input type="radio" value="desc" v-model="sortOrder"> Descending</label>
+                </div>
+
+                <div class="lesson" v-for="lesson in sortedLessons" v-bind:key="lesson._id">
                     <i v-bind:class="'fa fa-3x ' + lesson.icon" aria-hidden="true"></i>
                     <h2>{{lesson.topic}}</h2>
                     <p>Location: {{lesson.location}}</p>
@@ -73,6 +87,8 @@
                     lessons: lessonsArray,
                     cart: [],            // holds lesson _id values, one per space booked
                     showCart: false,
+                    sortBy: "topic",     // topic, location, price or space
+                    sortOrder: "asc",    // asc or desc
                     order: {
                         name: "",
                         phone: ""
@@ -81,6 +97,26 @@
                 }
             },
             computed:{
+                // A sorted COPY of the lessons, re-calculated whenever sortBy,
+                // sortOrder, the lessons or the cart change
+                sortedLessons: function(){
+                    const direction = this.sortOrder === "asc" ? 1 : -1;
+                    return [...this.lessons].sort((a, b) => {
+                        let valueA, valueB;
+                        if (this.sortBy === "space") {
+                            // sort by the spaces currently left
+                            valueA = this.spacesLeft(a);
+                            valueB = this.spacesLeft(b);
+                        } else {
+                            valueA = a[this.sortBy];
+                            valueB = b[this.sortBy];
+                        }
+                        if (typeof valueA === "string") {
+                            return valueA.localeCompare(valueB) * direction;
+                        }
+                        return (valueA - valueB) * direction;
+                    });
+                },
                 nameIsValid: function(){
                     return /^[A-Za-z ]+$/.test(this.order.name.trim());
                 },

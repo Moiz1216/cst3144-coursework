@@ -8,17 +8,18 @@
     <script src="lessons.js"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div id="app">
         <header>
-            <h1 v-text="sitename"></h1>
+            <h1><i class="fa fa-graduation-cap" aria-hidden="true"></i> {{sitename}}</h1>
 
             <!-- Cart button: enabled once at least one lesson is in the cart.
                  On the cart page it is always enabled so the user can go back. -->
             <button class="cart-btn" v-on:click="toggleCart()" v-bind:disabled="cart.length === 0 && !showCart">
-                <i class="fa fa-shopping-cart" aria-hidden="true"></i>
+                <i class="fa" v-bind:class="showCart ? 'fa-arrow-left' : 'fa-shopping-cart'" aria-hidden="true"></i>
                 {{ showCart ? 'Back to lessons' : 'Cart (' + cart.length + ')' }}
             </button>
         </header>
@@ -40,40 +41,67 @@
                     <label><input type="radio" value="desc" v-model="sortOrder"> Descending</label>
                 </div>
 
-                <div class="lesson" v-for="lesson in sortedLessons" v-bind:key="lesson._id">
-                    <i v-bind:class="'fa fa-3x ' + lesson.icon" aria-hidden="true"></i>
-                    <h2>{{lesson.topic}}</h2>
-                    <p>Location: {{lesson.location}}</p>
-                    <p>Price: £{{lesson.price}}</p>
-                    <p>Spaces: {{spacesLeft(lesson)}}</p>
+                <div class="lesson-grid">
+                    <div class="lesson" v-for="lesson in sortedLessons" v-bind:key="lesson._id">
+                        <div class="lesson-body">
+                            <h2><i v-bind:class="'fa ' + lesson.icon" aria-hidden="true"></i> {{lesson.topic}}</h2>
+                            <p><strong>Location:</strong> {{lesson.location}}</p>
+                            <p><strong>Price:</strong> £{{lesson.price}}</p>
+                            <p><strong>Spaces:</strong> {{spacesLeft(lesson)}}</p>
+                            <div class="spacer"></div>
 
-                    <!-- Always visible, disabled when there are no spaces left -->
-                    <button class="add-btn" v-on:click="addToCart(lesson)" v-bind:disabled="!canAddToCart(lesson)">
-                        Add to cart
-                    </button>
+                            <!-- Always visible, disabled when there are no spaces left -->
+                            <button class="add-btn" v-on:click="addToCart(lesson)" v-bind:disabled="!canAddToCart(lesson)">
+                                <i class="fa fa-cart-plus" aria-hidden="true"></i> Add to cart
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- ======================== CART PAGE ======================== -->
-            <div v-else>
-                <h2>Your Cart</h2>
-                <p v-if="cart.length === 0">Your cart is empty.</p>
+            <div v-else class="cart-layout">
+                <div class="panel">
+                    <h2>Your Cart</h2>
+                    <p class="empty" v-if="cart.length === 0">Your cart is empty.</p>
 
-                <div v-for="lesson in lessons" v-bind:key="lesson._id">
-                    <p v-if="cartCount(lesson._id) > 0">
-                        {{lesson.topic}} ({{lesson.location}}) x {{cartCount(lesson._id)}}
-                        <button v-on:click="removeFromCart(lesson)">Remove</button>
-                    </p>
+                    <!-- One row per lesson that is in the cart (lessons with 0 copies are skipped) -->
+                    <template v-for="lesson in lessons" v-bind:key="lesson._id">
+                        <div class="cart-item" v-if="cartCount(lesson._id) > 0">
+                            <div>
+                                <strong><i v-bind:class="'fa ' + lesson.icon" aria-hidden="true"></i> {{lesson.topic}}</strong>
+                                – {{lesson.location}}<br>
+                                {{cartCount(lesson._id)}} x £{{lesson.price}}
+                            </div>
+                            <button class="remove-btn" v-on:click="removeFromCart(lesson)">
+                                <i class="fa fa-trash" aria-hidden="true"></i> Remove
+                            </button>
+                        </div>
+                    </template>
+                    <p class="cart-total" v-if="cart.length > 0">Total: £{{cartTotal}}</p>
                 </div>
 
-                <h2>Checkout</h2>
-                <p>Name: <input v-model="order.name"></p>
-                <p>Phone: <input v-model="order.phone"></p>
+                <!-- Checkout is part of the cart page -->
+                <div class="panel">
+                    <h2>Checkout</h2>
+                    <div class="field">
+                        <label for="name">Name</label>
+                        <input id="name" type="text" v-model="order.name" placeholder="Letters only">
+                        <p class="hint" v-if="order.name && !nameIsValid">Name must contain letters only.</p>
+                    </div>
+                    <div class="field">
+                        <label for="phone">Phone</label>
+                        <input id="phone" type="tel" v-model="order.phone" placeholder="Numbers only">
+                        <p class="hint" v-if="order.phone && !phoneIsValid">Phone must contain numbers only.</p>
+                    </div>
 
-                <!-- Always visible, only enabled when name and phone are valid -->
-                <button class="add-btn" v-on:click="submitOrder()" v-bind:disabled="!canCheckout">Checkout</button>
+                    <!-- Always visible, only enabled when name and phone are valid -->
+                    <button class="add-btn" v-on:click="submitOrder()" v-bind:disabled="!canCheckout">
+                        <i class="fa fa-check" aria-hidden="true"></i> Checkout
+                    </button>
 
-                <p v-if="orderMessage">{{orderMessage}}</p>
+                    <p class="message success" v-if="orderMessage">{{orderMessage}}</p>
+                </div>
             </div>
         </main>
     </div>
@@ -116,6 +144,14 @@
                         }
                         return (valueA - valueB) * direction;
                     });
+                },
+                cartTotal: function(){
+                    let total = 0;
+                    for (const id of this.cart) {
+                        const lesson = this.lessons.find(l => l._id === id);
+                        if (lesson) total += lesson.price;
+                    }
+                    return total;
                 },
                 nameIsValid: function(){
                     return /^[A-Za-z ]+$/.test(this.order.name.trim());
